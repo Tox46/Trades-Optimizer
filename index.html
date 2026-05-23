@@ -1,0 +1,1607 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Resource Trade Optimizer</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Oxanium:wght@300;400;600;700;800&family=DM+Mono:wght@300;400;500&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --bg: #080a09;
+        --surface: #111413;
+        --surface2: #181c1a;
+        --border: #2a3230;
+        --wood: #f0a040;
+        --stone: #b8d4d0;
+        --metal: #88d8f8;
+        --food: #96e060;
+        --text: #f0f8f4;
+        --muted: #7a9490;
+        --accent: #d8f8e8;
+        --danger: #f06060;
+        --gain: #96e060;
+        --sans: "Oxanium", sans-serif;
+        --mono: "DM Mono", monospace;
+      }
+
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      body {
+        background: var(--bg);
+        color: var(--text);
+        font-family: var(--sans);
+        min-height: 100vh;
+        padding: 2.5rem 2rem;
+        font-size: 17px;
+        line-height: 1.55;
+        background-image:
+          radial-gradient(
+            ellipse 60% 40% at 80% 10%,
+            #1a2e2014 0%,
+            transparent 60%
+          ),
+          radial-gradient(
+            ellipse 40% 60% at 10% 80%,
+            #1a2a2014 0%,
+            transparent 60%
+          );
+      }
+
+      /* ── DOC SECTION ─────────────────────────────────────────────────────────── */
+      .doc {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-left: 3px solid var(--muted);
+        padding: 1.4rem 1.6rem;
+        margin-bottom: 2.5rem;
+        max-width: 860px;
+      }
+
+      .doc-title {
+        font-size: 0.72rem;
+        letter-spacing: 0.28em;
+        text-transform: uppercase;
+        color: var(--muted);
+        font-weight: 700;
+        margin-bottom: 1rem;
+      }
+
+      .doc p {
+        font-family: var(--mono);
+        font-size: 0.88rem;
+        color: var(--text);
+        opacity: 0.75;
+        margin-bottom: 0.6rem;
+        line-height: 1.7;
+      }
+      .doc p:last-child {
+        margin-bottom: 0;
+      }
+
+      .doc strong {
+        color: var(--accent);
+        font-weight: 500;
+        opacity: 1;
+      }
+
+      details > summary {
+        font-size: 0.8rem;
+        font-family: var(--mono);
+        color: var(--muted);
+        cursor: pointer;
+        letter-spacing: 0.08em;
+        margin-bottom: 0.8rem;
+        list-style: none;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+      }
+      details > summary::before {
+        content: "▶";
+        font-size: 0.6rem;
+        transition: transform 0.15s;
+      }
+      details[open] > summary::before {
+        transform: rotate(90deg);
+      }
+      details > summary::-webkit-details-marker {
+        display: none;
+      }
+
+      /* ── HEADER ──────────────────────────────────────────────────────────────── */
+      h1 {
+        font-size: 1.1rem;
+        font-weight: 700;
+        letter-spacing: 0.3em;
+        text-transform: uppercase;
+        color: var(--muted);
+        margin-bottom: 0.3rem;
+      }
+      h1 em {
+        color: var(--accent);
+        font-style: normal;
+      }
+
+      .subtitle {
+        font-size: 0.9rem;
+        color: var(--muted);
+        font-family: var(--mono);
+        margin-bottom: 2rem;
+        letter-spacing: 0.05em;
+      }
+
+      /* ── RESOURCE GRID ───────────────────────────────────────────────────────── */
+      .resource-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 2px;
+        background: var(--border);
+        border: 1px solid var(--border);
+        margin-bottom: 2px;
+      }
+
+      .res-col {
+        background: var(--surface);
+        padding: 0 0 1.4rem;
+      }
+
+      /* color splash: top border per resource */
+      .wood .res-col,
+      .res-col.wood {
+        border-top: 3px solid var(--wood);
+      }
+      .stone .res-col,
+      .res-col.stone {
+        border-top: 3px solid var(--stone);
+      }
+      .metal .res-col,
+      .res-col.metal {
+        border-top: 3px solid var(--metal);
+      }
+      .food .res-col,
+      .res-col.food {
+        border-top: 3px solid var(--food);
+      }
+
+      /* since grid children get the class directly */
+      .resource-grid .wood {
+        border-top: 3px solid var(--wood);
+      }
+      .resource-grid .stone {
+        border-top: 3px solid var(--stone);
+      }
+      .resource-grid .metal {
+        border-top: 3px solid var(--metal);
+      }
+      .resource-grid .food {
+        border-top: 3px solid var(--food);
+      }
+
+      .res-inner {
+        padding: 1.3rem 1.3rem 0;
+      }
+
+      .res-header {
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+        margin-bottom: 1.3rem;
+        padding-bottom: 0.85rem;
+        border-bottom: 1px solid var(--border);
+      }
+
+      .res-dot {
+        width: 11px;
+        height: 11px;
+        border-radius: 50%;
+        flex-shrink: 0;
+      }
+
+      .res-name {
+        font-weight: 800;
+        font-size: 1.2rem;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+
+      .wood .res-dot {
+        background: var(--wood);
+      }
+      .stone .res-dot {
+        background: var(--stone);
+      }
+      .metal .res-dot {
+        background: var(--metal);
+      }
+      .food .res-dot {
+        background: var(--food);
+      }
+      .wood .res-name {
+        color: var(--wood);
+      }
+      .stone .res-name {
+        color: var(--stone);
+      }
+      .metal .res-name {
+        color: var(--metal);
+      }
+      .food .res-name {
+        color: var(--food);
+      }
+
+      .field {
+        margin-bottom: 1.1rem;
+      }
+      .field:last-child {
+        margin-bottom: 0;
+      }
+
+      label {
+        display: block;
+        font-size: 0.78rem;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: var(--muted);
+        margin-bottom: 0.38rem;
+        font-weight: 600;
+      }
+
+      input[type="number"] {
+        width: 100%;
+        background: var(--surface2);
+        border: 1px solid var(--border);
+        border-left: 3px solid transparent;
+        color: var(--text);
+        font-family: var(--mono);
+        font-size: 1.05rem;
+        padding: 0.52rem 0.7rem;
+        outline: none;
+        transition: border-color 0.15s;
+        -moz-appearance: textfield;
+      }
+      input[type="number"]::-webkit-inner-spin-button,
+      input[type="number"]::-webkit-outer-spin-button {
+        -webkit-appearance: none;
+      }
+      input[type="number"]:focus {
+        border-color: var(--accent);
+      }
+      .wood input:focus {
+        border-left-color: var(--wood);
+      }
+      .stone input:focus {
+        border-left-color: var(--stone);
+      }
+      .metal input:focus {
+        border-left-color: var(--metal);
+      }
+      .food input:focus {
+        border-left-color: var(--food);
+      }
+
+      /* ── PASTE PANEL ─────────────────────────────────────────────────────────── */
+      .paste-panel {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-top: none;
+        padding: 1.3rem;
+        margin-bottom: 2px;
+      }
+
+      .paste-panel textarea {
+        width: 100%;
+        min-height: 7.5rem;
+        background: var(--surface2);
+        border: 1px solid var(--border);
+        color: var(--text);
+        font-family: var(--mono);
+        font-size: 0.9rem;
+        padding: 0.65rem 0.8rem;
+        resize: vertical;
+        outline: none;
+        line-height: 1.6;
+        display: block;
+        margin-bottom: 0.75rem;
+      }
+      .paste-panel textarea:focus {
+        border-color: var(--accent);
+      }
+      .paste-panel textarea::placeholder {
+        color: var(--muted);
+      }
+
+      .paste-btn {
+        background: transparent;
+        border: 1px solid var(--border);
+        color: var(--text);
+        font-family: var(--sans);
+        font-weight: 700;
+        font-size: 0.9rem;
+        letter-spacing: 0.15em;
+        text-transform: uppercase;
+        padding: 0.55rem 1.3rem;
+        cursor: pointer;
+        transition:
+          border-color 0.15s,
+          color 0.15s;
+      }
+      .paste-btn:hover {
+        border-color: var(--accent);
+        color: var(--accent);
+      }
+
+      #paste-status {
+        font-family: var(--mono);
+        font-size: 0.85rem;
+        margin-top: 0.6rem;
+        min-height: 1.3em;
+      }
+      #paste-status.ok {
+        color: var(--gain);
+      }
+      #paste-status.err {
+        color: var(--danger);
+      }
+
+      /* ── SOLVE ROW ───────────────────────────────────────────────────────────── */
+      .solve-row {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-top: none;
+        padding: 1.2rem 1.3rem;
+        display: flex;
+        align-items: center;
+        gap: 1.5rem;
+        margin-bottom: 2.5rem;
+      }
+
+      #solve-btn {
+        background: transparent;
+        border: 2px solid var(--accent);
+        color: var(--accent);
+        font-family: var(--sans);
+        font-weight: 800;
+        font-size: 1.05rem;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+        padding: 0.65rem 2rem;
+        cursor: pointer;
+        transition:
+          background 0.15s,
+          color 0.15s;
+        flex-shrink: 0;
+      }
+      #solve-btn:hover {
+        background: var(--accent);
+        color: var(--bg);
+      }
+      #solve-btn:disabled {
+        opacity: 0.5;
+        cursor: default;
+      }
+
+      #solve-status {
+        font-family: var(--mono);
+        font-size: 0.95rem;
+        color: var(--muted);
+      }
+
+      /* ── RESULTS ─────────────────────────────────────────────────────────────── */
+      #results {
+        display: none;
+      }
+
+      .section-title {
+        font-size: 0.8rem;
+        letter-spacing: 0.25em;
+        text-transform: uppercase;
+        color: var(--muted);
+        font-weight: 700;
+        margin-bottom: 1.2rem;
+      }
+
+      .compare-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 2px;
+        background: var(--border);
+        border: 1px solid var(--border);
+        margin-bottom: 2px;
+      }
+
+      .compare-panel {
+        background: var(--surface);
+        padding: 1.5rem 1.3rem;
+      }
+      .compare-panel.optimized {
+        background: #111a13;
+      }
+
+      .big-time {
+        font-size: 2.6rem;
+        font-weight: 800;
+        font-family: var(--mono);
+        line-height: 1;
+        margin: 0.5rem 0 0.4rem;
+      }
+      .big-time.baseline {
+        color: var(--muted);
+      }
+      .big-time.optimized {
+        color: var(--accent);
+      }
+
+      .saving-badge {
+        display: inline-block;
+        background: #182e1c;
+        border: 1px solid var(--gain);
+        color: var(--gain);
+        font-family: var(--mono);
+        font-size: 0.88rem;
+        padding: 0.22rem 0.75rem;
+        letter-spacing: 0.05em;
+      }
+
+      .breakdown-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 2px;
+        background: var(--border);
+        border: 1px solid var(--border);
+        margin-bottom: 2px;
+      }
+
+      .breakdown-col {
+        background: var(--surface);
+        padding: 0 0 1.3rem;
+      }
+
+      .breakdown-col .res-inner {
+        padding: 0 1.1rem;
+      }
+
+      /* color splash on breakdown cols too */
+      .breakdown-grid .wood {
+        border-top: 3px solid var(--wood);
+      }
+      .breakdown-grid .stone {
+        border-top: 3px solid var(--stone);
+      }
+      .breakdown-grid .metal {
+        border-top: 3px solid var(--metal);
+      }
+      .breakdown-grid .food {
+        border-top: 3px solid var(--food);
+      }
+
+      .bd-label {
+        font-size: 0.75rem;
+        letter-spacing: 0.15em;
+        text-transform: uppercase;
+        color: var(--muted);
+        font-weight: 600;
+        margin-bottom: 0.22rem;
+      }
+
+      .bd-val {
+        font-family: var(--mono);
+        font-size: 1.1rem;
+        font-weight: 500;
+        color: var(--text);
+      }
+      .bd-val.faster {
+        color: var(--gain);
+      }
+      .bd-val.bottleneck {
+        color: var(--accent);
+        font-weight: 700;
+      }
+
+      .bd-change {
+        font-family: var(--mono);
+        font-size: 0.85rem;
+        color: var(--muted);
+        margin-top: 0.15rem;
+      }
+      .bd-change.positive {
+        color: var(--gain);
+      }
+      .bd-change.negative {
+        color: var(--danger);
+      }
+
+      .trades-panel {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        padding: 1.5rem 1.3rem;
+        margin-bottom: 2px;
+      }
+
+      .trade-item {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        padding: 0.9rem 0;
+        border-bottom: 1px solid var(--border);
+        flex-wrap: wrap;
+      }
+      .trade-item:last-child {
+        border-bottom: none;
+      }
+
+      .trade-from,
+      .trade-to {
+        font-family: var(--mono);
+        font-size: 1.1rem;
+        font-weight: 500;
+      }
+
+      .trade-arrow {
+        color: var(--muted);
+        font-size: 1.1rem;
+        font-family: var(--mono);
+        flex-shrink: 0;
+      }
+
+      .trade-ratio {
+        font-size: 0.85rem;
+        color: var(--muted);
+        font-family: var(--mono);
+        margin-left: auto;
+      }
+
+      .no-trades {
+        font-family: var(--mono);
+        font-size: 1rem;
+        color: var(--muted);
+        padding: 0.75rem 0;
+      }
+
+      .bars-panel {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        padding: 1.5rem 1.3rem;
+        margin-bottom: 2.5rem;
+      }
+
+      .bar-row {
+        margin-bottom: 1.4rem;
+      }
+      .bar-row:last-child {
+        margin-bottom: 0;
+      }
+
+      .bar-meta {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 0.45rem;
+        align-items: baseline;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+      }
+
+      .bar-name {
+        font-weight: 700;
+        font-size: 1.05rem;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+      }
+
+      .bar-numbers {
+        font-family: var(--mono);
+        font-size: 0.88rem;
+        color: var(--muted);
+      }
+
+      .bar-track {
+        height: 9px;
+        background: var(--surface2);
+        position: relative;
+        overflow: visible;
+      }
+
+      .bar-fill-before {
+        position: absolute;
+        left: 0;
+        top: 0;
+        height: 100%;
+        opacity: 0.3;
+      }
+
+      .bar-fill-after {
+        position: absolute;
+        left: 0;
+        top: 0;
+        height: 100%;
+      }
+
+      .bar-target-marker {
+        position: absolute;
+        top: -4px;
+        height: 17px;
+        width: 2px;
+        background: rgba(255, 255, 255, 0.38);
+      }
+
+      .wood .bar-fill-before,
+      .wood .bar-fill-after {
+        background: var(--wood);
+      }
+      .stone .bar-fill-before,
+      .stone .bar-fill-after {
+        background: var(--stone);
+      }
+      .metal .bar-fill-before,
+      .metal .bar-fill-after {
+        background: var(--metal);
+      }
+      .food .bar-fill-before,
+      .food .bar-fill-after {
+        background: var(--food);
+      }
+      .wood .bar-name {
+        color: var(--wood);
+      }
+      .stone .bar-name {
+        color: var(--stone);
+      }
+      .metal .bar-name {
+        color: var(--metal);
+      }
+      .food .bar-name {
+        color: var(--food);
+      }
+
+      @media (max-width: 860px) {
+        .resource-grid,
+        .breakdown-grid {
+          grid-template-columns: 1fr 1fr;
+        }
+        .compare-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+      @media (max-width: 500px) {
+        .resource-grid,
+        .breakdown-grid {
+          grid-template-columns: 1fr;
+        }
+        body {
+          padding: 1.5rem 1rem;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Resource <em>Trade Optimizer</em></h1>
+    <p class="subtitle">
+      minimize time-to-target across all resources using optimal trades
+    </p>
+
+    <div class="doc">
+      <div class="doc-title">How this works</div>
+      <details>
+        <summary>Read documentation</summary>
+        <p>
+          This tool calculates the optimal set of one-time trades to make
+          <strong>right now</strong>, before production starts ticking, in order
+          to reach all four resource targets in the minimum possible total time.
+        </p>
+        <p>
+          The objective is collective: the goal is to minimize the time at which
+          the <strong>last</strong> resource hits its target. Fast resources
+          should donate to slow ones.
+        </p>
+        <p>
+          <strong>Trade mechanics:</strong> you give 12 or more units of one
+          resource and receive exactly ⌊given ÷ 3⌋ units of another. The minimum
+          trade is 12 → 4. There is no cap on how many trades you can do, but
+          all trades happen at the same time, before any production.
+        </p>
+        <p>
+          <strong>Storage cap:</strong> once a resource hits its storage limit,
+          production is wasted. If a resource would hit its cap before its
+          target without trades, its target is effectively unreachable without
+          help — the optimizer will redirect surplus from faster resources to
+          fix this.
+        </p>
+        <p>
+          <strong>Trade direction:</strong> each resource is either a net giver
+          or a net receiver — never both. The optimizer works internally with
+          net flows per pair, so circular trades (A→B and B→A) are structurally
+          impossible.
+        </p>
+        <p>
+          <strong>Paste import:</strong> copy your resource summary from the
+          game, paste it into the box below the input table, and hit "Parse
+          pasted text". The parser recognises Wood, Stone, Iron (mapped to Iron
+          here), and Food, along with Warehouse capacity and Food Cellar
+          capacity. Targets are never overwritten by the paste.
+        </p>
+        <p>
+          <strong>Solver:</strong> coordinate descent with 100 random restarts.
+          For 4 resources this finds the global optimum reliably, but results
+          may vary slightly between runs on edge cases.
+        </p>
+      </details>
+    </div>
+
+    <div class="resource-grid" id="resource-grid"></div>
+
+    <div class="paste-panel">
+      <textarea
+        id="paste-textarea"
+        placeholder="Copy your resource summary from the game and paste it here…"
+      ></textarea>
+      <div>
+        <button class="paste-btn" onclick="parseTextarea()">
+          Parse pasted text
+        </button>
+        <div id="paste-status"></div>
+      </div>
+    </div>
+
+    <div class="solve-row">
+      <button id="solve-btn" onclick="solve()">Optimize</button>
+      <span id="solve-status">Enter your values and hit Optimize.</span>
+    </div>
+
+    <div id="results">
+      <div class="compare-grid">
+        <div class="compare-panel">
+          <div class="section-title">Without trades — bottleneck</div>
+          <div class="big-time baseline" id="baseline-time">—</div>
+          <div
+            style="
+              font-size: 0.9rem;
+              color: var(--muted);
+              font-family: var(--mono);
+            "
+            id="baseline-bottleneck"
+          ></div>
+        </div>
+        <div class="compare-panel optimized">
+          <div class="section-title">With optimal trades — bottleneck</div>
+          <div class="big-time optimized" id="opt-time">—</div>
+          <div style="margin-top: 0.5rem" id="saving-badge"></div>
+        </div>
+      </div>
+
+      <div class="breakdown-grid" id="breakdown-grid"></div>
+
+      <div class="trades-panel">
+        <div class="section-title">Recommended trades</div>
+        <div id="trade-list"></div>
+      </div>
+
+      <div class="bars-panel">
+        <div class="section-title">
+          Storage overview — before / after trades
+        </div>
+        <div id="bars"></div>
+      </div>
+    </div>
+
+    <script>
+      const RES = ["wood", "stone", "metal", "food"];
+      const LABELS = {
+        wood: "wood",
+        stone: "stone",
+        metal: "iron",
+        food: "food",
+      };
+      const COLORS = {
+        wood: "#e8993a",
+        stone: "#a8c4bf",
+        metal: "#7ec8e8",
+        food: "#88d460",
+      };
+
+      const state = {
+        wood: { current: 0, production: 0, storage: 0, target: 0 },
+        stone: { current: 0, production: 0, storage: 0, target: 0 },
+        metal: { current: 0, production: 0, storage: 0, target: 0 },
+        food: { current: 0, production: 0, storage: 0, target: 0 },
+      };
+
+      // One-slot optimization memory.
+      // When parameters change, the slot is replaced.
+      const optimizationMemory = {
+        signature: null,
+        bestResult: null,
+      };
+
+      function getStateSignature() {
+        return JSON.stringify(
+          RES.map((r) => ({
+            current: state[r].current,
+            production: state[r].production,
+            storage: state[r].storage,
+            target: state[r].target,
+          })),
+        );
+      }
+
+      function getImprovement(result) {
+        if (!isFinite(result.optimizedScore)) return -Infinity;
+        if (!isFinite(result.baselineScore)) return Infinity;
+        return result.baselineScore - result.optimizedScore;
+      }
+
+      function isBetterResult(candidate, currentBest) {
+        if (!currentBest) return true;
+
+        const candImprove = getImprovement(candidate);
+        const bestImprove = getImprovement(currentBest);
+
+        if (candImprove > bestImprove + 1e-9) return true;
+        if (candImprove < bestImprove - 1e-9) return false;
+
+        // Tie-breaker: lower optimized makespan wins
+        return candidate.optimizedScore < currentBest.optimizedScore - 1e-9;
+      }
+
+      // ── Paste parser ──────────────────────────────────────────────────────────────
+      // Handles two formats automatically:
+      //
+      // RESOURCE FORMAT (contains "/hr" lines) — updates current, production, storage:
+      //   Wood
+      //   2,549
+      //   317/hr
+      //   Stone / Iron / Food …
+      //   Warehouse capacity
+      //   5,100
+      //   Food Cellar capacity
+      //   3,000
+      //
+      // TARGET FORMAT (plain name → number pairs, no "/hr") — updates targets only:
+      //   Wood
+      //   238
+      //   Stone
+      //   203
+      //   Iron
+      //   139
+      //   Food
+      //   131
+      //   Industry   ← ignored
+      //   18         ← ignored
+
+      const NAME_MAP = {
+        wood: "wood",
+        stone: "stone",
+        iron: "metal",
+        metal: "metal",
+        food: "food",
+      };
+      const IGNORED_NAMES = new Set(["industry"]);
+
+      function detectFormat(lines) {
+        // If any line matches /hr it's a resource paste; otherwise target paste.
+        return lines.some((l) => /\/\s*h/i.test(l)) ? "resource" : "target";
+      }
+
+      function parseResourceText(lines) {
+        const parsed = {};
+        const storage = {};
+        let currentResource = null;
+        let expectNext = null;
+        let pendingStorage = null;
+
+        for (const line of lines) {
+          const lower = line.toLowerCase();
+          const resKey = NAME_MAP[lower];
+
+          if (resKey) {
+            currentResource = resKey;
+            expectNext = "current";
+            pendingStorage = null;
+            continue;
+          }
+
+          if (
+            lower.includes("warehouse capacity") ||
+            lower.includes("warehouse")
+          ) {
+            pendingStorage = "main";
+            currentResource = null;
+            expectNext = null;
+            continue;
+          }
+          if (lower.includes("food cellar") || lower.includes("cellar")) {
+            pendingStorage = "food";
+            currentResource = null;
+            expectNext = null;
+            continue;
+          }
+
+          const prodMatch = line.match(/^([\d,]+)\s*\/\s*h/i);
+          if (prodMatch && currentResource && expectNext === "production") {
+            const val = parseInt(prodMatch[1].replace(/,/g, ""), 10);
+            if (!isNaN(val)) {
+              if (!parsed[currentResource]) parsed[currentResource] = {};
+              parsed[currentResource].production = val;
+              expectNext = null;
+            }
+            continue;
+          }
+
+          const numMatch = line.match(/^([\d,]+)$/);
+          if (numMatch) {
+            const val = parseInt(numMatch[1].replace(/,/g, ""), 10);
+            if (isNaN(val)) continue;
+            if (pendingStorage === "main") {
+              storage.main = val;
+              pendingStorage = null;
+              continue;
+            }
+            if (pendingStorage === "food") {
+              storage.food = val;
+              pendingStorage = null;
+              continue;
+            }
+            if (currentResource && expectNext === "current") {
+              if (!parsed[currentResource]) parsed[currentResource] = {};
+              parsed[currentResource].current = val;
+              expectNext = "production";
+              continue;
+            }
+          }
+        }
+
+        const found = Object.keys(parsed);
+        if (found.length === 0)
+          throw new Error("No resources recognised in the text.");
+
+        for (const [r, vals] of Object.entries(parsed)) {
+          if (vals.current !== undefined) state[r].current = vals.current;
+          if (vals.production !== undefined)
+            state[r].production = vals.production;
+        }
+        if (storage.main !== undefined)
+          ["wood", "stone", "metal"].forEach((r) => {
+            state[r].storage = storage.main;
+          });
+        if (storage.food !== undefined) state.food.storage = storage.food;
+
+        return {
+          found: found.map((r) => LABELS[r] || r),
+          label: "Resources updated",
+        };
+      }
+
+      function parseTargetText(lines) {
+        const parsed = {};
+        let currentResource = null;
+
+        for (const line of lines) {
+          const lower = line.toLowerCase();
+
+          if (IGNORED_NAMES.has(lower)) {
+            currentResource = null;
+            continue;
+          }
+
+          const resKey = NAME_MAP[lower];
+          if (resKey) {
+            currentResource = resKey;
+            continue;
+          }
+
+          const numMatch = line.match(/^([\d,]+)$/);
+          if (numMatch && currentResource) {
+            const val = parseInt(numMatch[1].replace(/,/g, ""), 10);
+            if (!isNaN(val)) {
+              parsed[currentResource] = val;
+              currentResource = null;
+            }
+            continue;
+          }
+
+          // Any unrecognised non-number line resets context
+          if (!numMatch) currentResource = null;
+        }
+
+        const found = Object.keys(parsed);
+        if (found.length === 0)
+          throw new Error("No targets recognised in the text.");
+
+        for (const [r, val] of Object.entries(parsed)) state[r].target = val;
+
+        return {
+          found: found.map((r) => LABELS[r] || r),
+          label: "Targets updated",
+        };
+      }
+
+      function parseGameText(raw) {
+        const lines = raw
+          .split("\n")
+          .map((l) => l.replace(/#.*$/, "").trim())
+          .filter(Boolean);
+        const fmt = detectFormat(lines);
+        return fmt === "resource"
+          ? parseResourceText(lines)
+          : parseTargetText(lines);
+      }
+
+      function applyParse(raw) {
+        const statusEl = document.getElementById("paste-status");
+        clearTimeout(statusEl._timer);
+        try {
+          const { found, label } = parseGameText(raw);
+          buildGrid();
+          statusEl.className = "ok";
+          statusEl.textContent = `${label}: ${found.join(", ")}`;
+          statusEl._timer = setTimeout(() => {
+            statusEl.textContent = "";
+            statusEl.className = "";
+          }, 12000);
+        } catch (e) {
+          statusEl.className = "err";
+          statusEl.textContent = e.message;
+        }
+      }
+
+      function parseTextarea() {
+        const text = document.getElementById("paste-textarea").value;
+        if (!text.trim()) {
+          const statusEl = document.getElementById("paste-status");
+          statusEl.className = "err";
+          statusEl.textContent = "Nothing to parse.";
+          return;
+        }
+        applyParse(text);
+      }
+
+      // ── Build input grid ──────────────────────────────────────────────────────────
+      function buildGrid() {
+        const g = document.getElementById("resource-grid");
+        g.innerHTML = "";
+        RES.forEach((r) => {
+          const d = state[r];
+          g.innerHTML += `
+      <div class="res-col ${r}">
+        <div class="res-inner">
+        <div class="res-header">
+          <div class="res-dot"></div>
+          <span class="res-name">${LABELS[r]}</span>
+        </div>
+        <div class="field">
+          <label>Current</label>
+          <input type="number" value="${d.current}" min="0" oninput="setState('${r}','current',this.value)">
+        </div>
+        <div class="field">
+          <label>Production / h</label>
+          <input type="number" value="${d.production}" min="0" oninput="setState('${r}','production',this.value)">
+        </div>
+        <div class="field">
+          <label>Storage limit</label>
+          <input type="number" value="${d.storage}" min="1" oninput="setState('${r}','storage',this.value)">
+        </div>
+        <div class="field">
+          <label>Target</label>
+          <input type="number" value="${d.target}" min="0" oninput="setState('${r}','target',this.value)">
+        </div>
+        </div>
+      </div>`;
+        });
+      }
+
+      function setState(r, field, val) {
+        state[r][field] = parseFloat(val) || 0;
+      }
+
+      // ── Core simulation ───────────────────────────────────────────────────────────
+      // Given starting amounts (after any trades), returns the makespan to hit all targets.
+      // After a resource hits its storage cap, production is wasted — so if target > cap
+      // it's impossible. Resources already at target contribute 0.
+      function simulate(amounts) {
+        let makespan = 0;
+        for (let i = 0; i < RES.length; i++) {
+          const r = RES[i];
+          const cur = amounts[i];
+          const prod = state[r].production;
+          const stor = state[r].storage;
+          const tgt = state[r].target;
+
+          if (tgt > stor) return Infinity; // impossible
+          if (cur >= tgt) continue; // already done
+          if (prod <= 0) return Infinity; // stuck
+
+          // If we're already at cap and still below target: stuck
+          if (cur >= stor) return Infinity;
+
+          const timeToTgt = (tgt - cur) / prod;
+          const timeToCap = (stor - cur) / prod;
+
+          // If target is reached before cap — fine
+          if (timeToTgt <= timeToCap + 1e-9) {
+            makespan = Math.max(makespan, timeToTgt);
+          } else {
+            // Hits cap first, production wasted, target never reached
+            return Infinity;
+          }
+        }
+        return makespan;
+      }
+
+      // ── Optimizer ─────────────────────────────────────────────────────────────────
+      // Variables: one signed value per PAIR (i,j) with i<j.
+      // flow[k] > 0 means resource pairA gives |flow[k]| to pairB.
+      // flow[k] < 0 means resource pairB gives |flow[k]| to pairA.
+      // This structurally prevents back-and-forth trades between the same pair.
+
+      function optimizeTrades() {
+        const N = RES.length;
+        const base = RES.map((r) => state[r].current);
+        const baselineScore = simulate(base);
+
+        // Build ordered list of pairs (i<j)
+        const pairs = [];
+        for (let i = 0; i < N; i++)
+          for (let j = i + 1; j < N; j++) pairs.push([i, j]);
+        const P = pairs.length; // N*(N-1)/2 = 6 for 4 resources
+
+        // flow[k]: positive → pairs[k][0] gives to pairs[k][1], negative → reverse.
+        // The actual amount given is |flow[k]|, receiver gets floor(|flow[k]|/3).
+        function applyFlows(flows) {
+          const amounts = [...base];
+          for (let k = 0; k < P; k++) {
+            const [i, j] = pairs[k];
+            const f = flows[k];
+            if (Math.abs(f) < 12) continue;
+            const giver = f > 0 ? i : j;
+            const receiver = f > 0 ? j : i;
+            const give = Math.abs(f);
+            amounts[giver] -= give;
+            amounts[receiver] = Math.min(
+              amounts[receiver] + Math.floor(give / 3),
+              state[RES[receiver]].storage,
+            );
+          }
+          return amounts;
+        }
+
+        function feasible(flows) {
+          // Each resource cannot give away more than it has
+          const spent = new Array(N).fill(0);
+          for (let k = 0; k < P; k++) {
+            const [i, j] = pairs[k];
+            const f = flows[k];
+            if (Math.abs(f) < 12) continue;
+            const giver = f > 0 ? i : j;
+            spent[giver] += Math.abs(f);
+          }
+          for (let i = 0; i < N; i++)
+            if (spent[i] > base[i] + 0.5) return false;
+          return true;
+        }
+
+        function score(flows) {
+          if (!feasible(flows)) return Infinity;
+          const amounts = applyFlows(flows);
+          for (const a of amounts) if (a < -0.5) return Infinity;
+          return simulate(amounts);
+        }
+
+        const STEPS = [
+          1000, 300, 100, 30, 10, 3, 1, -1, -3, -10, -30, -100, -300, -1000,
+        ];
+
+        let best = new Array(P).fill(0);
+        let bestS = baselineScore;
+
+        // Heuristic seeds: figure out which resources are slow and need help
+        const rawTimes = RES.map((r, i) => {
+          const cur = base[i],
+            prod = state[r].production,
+            stor = state[r].storage,
+            tgt = state[r].target;
+          if (cur >= tgt) return 0;
+          if (prod <= 0 || tgt > stor) return Infinity;
+          const tt = (tgt - cur) / prod;
+          const tc = (stor - cur) / prod;
+          return tt <= tc ? tt : Infinity;
+        });
+
+        const RESTARTS = 100;
+
+        for (let restart = 0; restart < RESTARTS; restart++) {
+          let flows = new Array(P).fill(0);
+
+          if (restart > 0) {
+            // Seed: find slowest reachable resource; donate from faster ones
+            const finiteMax = Math.max(...rawTimes.filter(isFinite));
+            const slowest = rawTimes.indexOf(finiteMax);
+
+            for (let k = 0; k < P; k++) {
+              const [i, j] = pairs[k];
+              const donor = j === slowest ? i : i === slowest ? j : -1;
+              const receiver = slowest;
+              if (
+                donor >= 0 &&
+                rawTimes[donor] < finiteMax * 0.85 &&
+                Math.random() < 0.6
+              ) {
+                const maxGive = Math.floor(
+                  base[donor] * (0.05 + Math.random() * 0.5),
+                );
+                // sign: positive if donor==i (donor gives to j), negative if donor==j
+                flows[k] = donor === i ? maxGive : -maxGive;
+              } else if (Math.random() < 0.1) {
+                // small random exploration
+                const maxG = Math.floor(Math.random() * 300);
+                flows[k] = Math.random() < 0.5 ? maxG : -maxG;
+              }
+            }
+          }
+
+          let changed = true,
+            iters = 0;
+          while (changed && iters < 600) {
+            changed = false;
+            iters++;
+            const order = Array.from({ length: P }, (_, k) => k).sort(
+              () => Math.random() - 0.5,
+            );
+            for (const k of order) {
+              const curS = score(flows);
+              // Try steps in both directions from current value
+              for (const step of STEPS) {
+                const c = [...flows];
+                c[k] = flows[k] + step;
+                if (score(c) < curS - 1e-9) {
+                  flows = c;
+                  changed = true;
+                  break;
+                }
+              }
+              // Try exact "give exactly enough to get receiver to target"
+              const [i, j] = pairs[k];
+              for (const [giver, receiver, sign] of [
+                [i, j, 1],
+                [j, i, -1],
+              ]) {
+                const needed = Math.max(
+                  0,
+                  state[RES[receiver]].target - base[receiver],
+                );
+                const give3 = needed * 3; // give this much to receive `needed`
+                const c = [...flows];
+                c[k] = sign * give3;
+                if (score(c) < curS - 1e-9) {
+                  flows = c;
+                  changed = true;
+                  break;
+                }
+              }
+            }
+            if (score(flows) < bestS - 1e-9) {
+              best = [...flows];
+              bestS = score(flows);
+            }
+          }
+          if (score(flows) < bestS - 1e-9) {
+            best = [...flows];
+            bestS = score(flows);
+          }
+        }
+
+        // Fine-tune best with small steps
+        let fineChanged = true;
+        for (let pass = 0; pass < 12 && fineChanged; pass++) {
+          fineChanged = false;
+          for (let k = 0; k < P; k++) {
+            for (const step of [-3, -2, -1, 1, 2, 3]) {
+              const c = [...best];
+              c[k] = best[k] + step;
+              if (score(c) < bestS - 1e-9) {
+                best = c;
+                bestS = score(c);
+                fineChanged = true;
+              }
+            }
+          }
+        }
+
+        // ── Consolidate to net flows ─────────────────────────────────────────────────
+        // For each resource, compute net units given away (positive = net giver).
+        // A resource that both gives and receives in separate trades gets collapsed:
+        // the received units (×3 cost to produce) offset the given units.
+        // Then we pair net givers against net receivers directly.
+
+        const netGive = new Array(N).fill(0); // positive = this resource gives away units
+        for (let k = 0; k < P; k++) {
+          const [i, j] = pairs[k];
+          const f = best[k];
+          if (Math.abs(f) < 12) continue;
+          const giver = f > 0 ? i : j;
+          const receiver = f > 0 ? j : i;
+          const give = Math.round(Math.abs(f));
+          // Receiver gets floor(give/3) units, which "cost" give units from the giver.
+          // To cancel out: receiving X units is equivalent to not giving 3X units.
+          netGive[giver] += give;
+          netGive[receiver] -= give; // receiving floor(give/3) saves give units of giving
+        }
+
+        // Split into givers (netGive > 0) and receivers (netGive < 0)
+        // Use queues and pair them off greedily, rounding give amounts to multiples of 3.
+        const givers = []; // { idx, amount } — amount to give away
+        const receivers = []; // { idx, amount } — amount they should receive (in give-units)
+
+        for (let i = 0; i < N; i++) {
+          const n = netGive[i];
+          if (n >= 12) givers.push({ idx: i, amount: n });
+          else if (n <= -12) receivers.push({ idx: i, amount: -n });
+        }
+
+        const trades = [];
+        let gi = 0,
+          ri = 0;
+        while (gi < givers.length && ri < receivers.length) {
+          const g = givers[gi];
+          const r = receivers[ri];
+          const give = Math.min(g.amount, r.amount);
+          const giveRounded = Math.floor(give / 3) * 3; // must be multiple of 3
+          if (giveRounded >= 12) {
+            trades.push({
+              from: RES[g.idx],
+              to: RES[r.idx],
+              give: giveRounded,
+              receive: Math.floor(giveRounded / 3),
+            });
+          }
+          g.amount -= give;
+          r.amount -= give;
+          if (g.amount < 12) gi++;
+          if (r.amount < 12) ri++;
+        }
+
+        return {
+          trades,
+          finalAmounts: applyFlows(best),
+          baselineScore,
+          optimizedScore: bestS,
+        };
+      }
+
+      // ── Helpers ───────────────────────────────────────────────────────────────────
+      function fmtTime(h) {
+        if (!isFinite(h) || h === Infinity) return "never";
+        if (h < 0.017) return "< 1m";
+        const hh = Math.floor(h);
+        const mm = Math.round((h - hh) * 60);
+        if (hh === 0) return `${mm}m`;
+        if (mm === 0) return `${hh}h`;
+        return `${hh}h ${mm}m`;
+      }
+
+      function timeForResource(cur, prod, stor, tgt) {
+        if (cur >= tgt) return 0;
+        if (prod <= 0 || tgt > stor) return Infinity;
+        const timeToCap = (stor - cur) / prod;
+        const timeToTgt = (tgt - cur) / prod;
+        return timeToTgt <= timeToCap + 1e-9 ? timeToTgt : Infinity;
+      }
+
+      // ── Solve entry point ─────────────────────────────────────────────────────────
+      function solve() {
+        const btn = document.getElementById("solve-btn");
+        const status = document.getElementById("solve-status");
+        btn.disabled = true;
+        status.textContent = "Optimizing…";
+
+        setTimeout(() => {
+          try {
+            // Clear paste zone on every optimization run
+            document.getElementById("paste-textarea").value = "";
+            document.getElementById("paste-status").textContent = "";
+            document.getElementById("paste-status").className = "";
+
+            const signature = getStateSignature();
+            const isNewSetup = optimizationMemory.signature !== signature;
+
+            let result;
+            let note = "";
+
+            if (isNewSetup) {
+              optimizationMemory.signature = signature;
+              optimizationMemory.bestResult = null;
+
+              // First solve for a parameter set:
+              // run 10 independent simulations and keep the best.
+              for (let i = 0; i < 10; i++) {
+                const candidate = optimizeTrades();
+                if (isBetterResult(candidate, optimizationMemory.bestResult)) {
+                  optimizationMemory.bestResult = candidate;
+                }
+              }
+
+              result = optimizationMemory.bestResult;
+              note = "New setup: ran 10 simulations and kept the best result.";
+            } else {
+              // Same parameters: run once and only keep it if it beats memory.
+              const candidate = optimizeTrades();
+
+              if (isBetterResult(candidate, optimizationMemory.bestResult)) {
+                optimizationMemory.bestResult = candidate;
+                note = "Found a better optimization than the previous best.";
+              } else {
+                note = "Kept previous best optimization.";
+              }
+
+              result = optimizationMemory.bestResult;
+            }
+
+            renderResults(result);
+            document.getElementById("results").style.display = "block";
+            status.textContent = note;
+          } catch (e) {
+            status.textContent = "Error: " + e.message;
+          }
+          btn.disabled = false;
+        }, 40);
+      }
+
+      // ── Render ────────────────────────────────────────────────────────────────────
+      function renderResults({
+        trades,
+        finalAmounts,
+        baselineScore,
+        optimizedScore,
+      }) {
+        // — Comparison header
+        const slowestR = RES.reduce(
+          (w, r) => {
+            const t = timeForResource(
+              state[r].current,
+              state[r].production,
+              state[r].storage,
+              state[r].target,
+            );
+            return t > w.t ? { r, t } : w;
+          },
+          { r: "", t: -1 },
+        );
+
+        document.getElementById("baseline-time").textContent =
+          fmtTime(baselineScore);
+        document.getElementById("baseline-bottleneck").textContent = isFinite(
+          baselineScore,
+        )
+          ? `bottleneck: ${LABELS[slowestR.r]}`
+          : "some targets unreachable without trades";
+
+        document.getElementById("opt-time").textContent =
+          fmtTime(optimizedScore);
+
+        const savEl = document.getElementById("saving-badge");
+        if (!isFinite(baselineScore) && isFinite(optimizedScore)) {
+          savEl.innerHTML = `<span class="saving-badge">targets now reachable</span>`;
+        } else if (
+          isFinite(baselineScore) &&
+          isFinite(optimizedScore) &&
+          optimizedScore < baselineScore - 0.05
+        ) {
+          const saved = baselineScore - optimizedScore;
+          savEl.innerHTML = `<span class="saving-badge">saves ${fmtTime(saved)}</span>`;
+        } else {
+          savEl.innerHTML = `<span style="font-family:var(--mono);font-size:0.88rem;color:var(--muted)">no improvement found</span>`;
+        }
+
+        // — Per-resource breakdown
+        const bdg = document.getElementById("breakdown-grid");
+        bdg.innerHTML = "";
+        RES.forEach((r, i) => {
+          const d = state[r];
+          const tBefore = timeForResource(
+            d.current,
+            d.production,
+            d.storage,
+            d.target,
+          );
+          const tAfter = timeForResource(
+            finalAmounts[i],
+            d.production,
+            d.storage,
+            d.target,
+          );
+          const isBottleneck =
+            isFinite(optimizedScore) &&
+            Math.abs(tAfter - optimizedScore) < 0.02;
+
+          const delta = tBefore - tAfter;
+          let changeTxt = "",
+            changeCls = "";
+          if (isFinite(delta) && Math.abs(delta) > 0.02) {
+            changeTxt =
+              delta > 0
+                ? `− ${fmtTime(delta)} faster`
+                : `+ ${fmtTime(-delta)} slower`;
+            changeCls = delta > 0 ? "positive" : "negative";
+          } else if (!isFinite(tBefore) && isFinite(tAfter)) {
+            changeTxt = "now reachable";
+            changeCls = "positive";
+          }
+
+          const valCls = isBottleneck
+            ? "bottleneck"
+            : tAfter < tBefore - 0.02
+              ? "faster"
+              : "";
+
+          bdg.innerHTML += `
+      <div class="breakdown-col ${r}">
+        <div class="res-inner">
+        <div class="res-header" style="margin-bottom:0.8rem;padding-bottom:0.6rem">
+          <div class="res-dot"></div>
+          <span class="res-name" style="font-size:0.95rem">${LABELS[r]}</span>
+          ${isBottleneck ? '<span style="font-size:0.65rem;letter-spacing:0.1em;color:var(--accent);margin-left:auto;font-weight:700">LIMIT</span>' : ""}
+        </div>
+        <div class="bd-label">Before trades</div>
+        <div class="bd-val" style="color:var(--muted)">${fmtTime(tBefore)}</div>
+        <div class="bd-label" style="margin-top:0.7rem">After trades</div>
+        <div class="bd-val ${valCls}">${fmtTime(tAfter)}</div>
+        ${changeTxt ? `<div class="bd-change ${changeCls}">${changeTxt}</div>` : ""}
+        <div class="bd-label" style="margin-top:0.7rem">Stock after</div>
+        <div class="bd-val" style="font-size:0.95rem">${Math.round(finalAmounts[i]).toLocaleString()}</div>
+        </div>
+      </div>`;
+        });
+
+        // — Trade list
+        const tl = document.getElementById("trade-list");
+        if (trades.length === 0) {
+          tl.innerHTML =
+            '<div class="no-trades">No trades needed — already optimal.</div>';
+        } else {
+          tl.innerHTML = trades
+            .map(
+              (t) => `
+      <div class="trade-item">
+        <span class="trade-from" style="color:${COLORS[t.from]}">${t.give.toLocaleString()} ${LABELS[t.from]}</span>
+        <span class="trade-arrow">&#8594;</span>
+        <span class="trade-to" style="color:${COLORS[t.to]}">${t.receive.toLocaleString()} ${LABELS[t.to]}</span>
+        <span class="trade-ratio">(3:1${t.give % 3 !== 0 ? ", " + (t.give % 3) + " wasted" : ""})</span>
+      </div>`,
+            )
+            .join("");
+        }
+
+        // — Progress bars
+        const bars = document.getElementById("bars");
+        bars.innerHTML = "";
+        RES.forEach((r, i) => {
+          const d = state[r];
+          const beforePct = Math.min(100, (d.current / d.storage) * 100);
+          const afterPct = Math.min(100, (finalAmounts[i] / d.storage) * 100);
+          const targetPct = Math.min(100, (d.target / d.storage) * 100);
+          bars.innerHTML += `
+      <div class="bar-row ${r}">
+        <div class="bar-meta">
+          <span class="bar-name">${LABELS[r]}</span>
+          <span class="bar-numbers">
+            ${Math.round(d.current).toLocaleString()} &#8594; ${Math.round(finalAmounts[i]).toLocaleString()} / ${d.storage.toLocaleString()}
+            &nbsp;|&nbsp; target ${d.target.toLocaleString()}
+          </span>
+        </div>
+        <div class="bar-track">
+          <div class="bar-fill-before" style="width:${beforePct}%"></div>
+          <div class="bar-fill-after"  style="width:${afterPct}%"></div>
+          <div class="bar-target-marker" style="left:${targetPct}%"></div>
+        </div>
+      </div>`;
+        });
+      }
+
+      buildGrid();
+    </script>
+  </body>
+</html>
