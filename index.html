@@ -804,6 +804,11 @@
         food: "#88d460",
       };
 
+      // The in-game trader always takes this long to deliver received goods,
+      // regardless of quantity or resource type. Resources you GIVE away leave
+      // instantly, but resources you RECEIVE only land after this delay.
+      const TRADE_DELAY_HOURS = 10 / 60; // 10 minutes
+
       const state = {
         wood: { current: 0, production: 0, storage: 0, target: 0 },
         stone: { current: 0, production: 0, storage: 0, target: 0 },
@@ -1039,6 +1044,7 @@
           buildGrid();
           statusEl.className = "ok";
           statusEl.textContent = `${label}: ${found.join(", ")}`;
+          document.getElementById("paste-textarea").value = "";
           statusEl._timer = setTimeout(() => {
             statusEl.textContent = "";
             statusEl.className = "";
@@ -1099,10 +1105,15 @@
       }
 
       // ── Core simulation ───────────────────────────────────────────────────────────
-      // Given starting amounts (after any trades), returns the makespan to hit all targets.
+      // `amounts` are PRE-TRADE-RECEIPT amounts: current stock with any given-away
+      // resources already removed (that happens instantly), but NOT yet including
+      // anything this resource is due to receive from a trade — that only lands
+      // after TRADE_DELAY_HOURS. `received[i]` is how much resource i is owed from
+      // trades (0 if none). Returns the makespan to hit all targets.
       // After a resource hits its storage cap, production is wasted — so if target > cap
       // it's impossible. Resources already at target contribute 0.
-      function simulate(amounts) {
+      function simulate(amounts, received) {
+        received = received || new Array(RES.length).fill(0);
         let makespan = 0;
         for (let i = 0; i < RES.length; i++) {
           const r = RES[i];
@@ -1111,23 +1122,16 @@
           const stor = state[r].storage;
           const tgt = state[r].target;
 
-          if (tgt > stor) return Infinity; // impossible
-          if (cur >= tgt) continue; // already done
-          if (prod <= 0) return Infinity; // stuck
-
-          // If we're already at cap and still below target: stuck
-          if (cur >= stor) return Infinity;
-
-          const timeToTgt = (tgt - cur) / prod;
-          const timeToCap = (stor - cur) / prod;
-
-          // If target is reached before cap — fine
-          if (timeToTgt <= timeToCap + 1e-9) {
-            makespan = Math.max(makespan, timeToTgt);
-          } else {
-            // Hits cap first, production wasted, target never reached
-            return Infinity;
-          }
+          const t = timeForResourceWithTrade(
+            cur,
+            prod,
+            stor,
+            tgt,
+            received[i],
+            TRADE_DELAY_HOURS,
+          );
+          if (!isFinite(t)) return Infinity;
+          makespan = Math.max(makespan, t);
         }
         return makespan;
       }
@@ -1184,11 +1188,29 @@
           return true;
         }
 
+        // Splits flows into what's removed instantly (giver side) vs what's owed
+        // and only arrives after TRADE_DELAY_HOURS (receiver side).
+        function splitFlows(flows) {
+          const preTrade = [...base];
+          const received = new Array(N).fill(0);
+          for (let k = 0; k < P; k++) {
+            const [i, j] = pairs[k];
+            const f = flows[k];
+            if (Math.abs(f) < 12) continue;
+            const giver = f > 0 ? i : j;
+            const receiver = f > 0 ? j : i;
+            const give = Math.abs(f);
+            preTrade[giver] -= give;
+            received[receiver] += Math.floor(give / 3);
+          }
+          return { preTrade, received };
+        }
+
         function score(flows) {
           if (!feasible(flows)) return Infinity;
-          const amounts = applyFlows(flows);
-          for (const a of amounts) if (a < -0.5) return Infinity;
-          return simulate(amounts);
+          const { preTrade, received } = splitFlows(flows);
+          for (const a of preTrade) if (a < -0.5) return Infinity;
+          return simulate(preTrade, received);
         }
 
         const STEPS = [
@@ -1364,9 +1386,14 @@
           if (r.amount < 12) ri++;
         }
 
+        const { preTrade: bestPreTrade, received: bestReceived } =
+          splitFlows(best);
+
         return {
           trades,
           finalAmounts: applyFlows(best),
+          preTradeAmounts: bestPreTrade,
+          tradeReceived: bestReceived,
           baselineScore,
           optimizedScore: bestS,
         };
@@ -1389,6 +1416,38 @@
         const timeToCap = (stor - cur) / prod;
         const timeToTgt = (tgt - cur) / prod;
         return timeToTgt <= timeToCap + 1e-9 ? timeToTgt : Infinity;
+      }
+
+      // Like timeForResource, but `received` units are owed from a trade and only
+      // land after `delay` hours (the trader always takes 10 minutes to deliver,
+      // no matter the quantity). Production keeps accruing normally in the
+      // meantime; the trade amount is simply added on top once it arrives,
+      // capped at storage. If production alone reaches the target before the
+      // trade would even land, the trade doesn't help and is ignored.
+      function timeForResourceWithTrade(cur, prod, stor, tgt, received, delay) {
+        if (!received || received <= 0)
+          return timeForResource(cur, prod, stor, tgt);
+        if (cur >= tgt) return 0;
+        if (tgt > stor) return Infinity; // impossible regardless of trades
+
+        // Does production alone get there before the trade lands anyway?
+        const tNoTrade = timeForResource(cur, prod, stor, tgt);
+        if (isFinite(tNoTrade) && tNoTrade <= delay + 1e-9) return tNoTrade;
+
+        // Stock accrued (capped at storage) at the moment the trade lands
+        const amtAtDelay =
+          prod > 0 ? Math.min(stor, cur + prod * delay) : cur;
+
+        const amtAfterTrade = Math.min(stor, amtAtDelay + received);
+        if (amtAfterTrade >= tgt) return delay;
+
+        if (prod <= 0) return Infinity; // stuck even after the trade lands
+        const remaining = tgt - amtAfterTrade;
+        const timeToCapAfter = (stor - amtAfterTrade) / prod;
+        const timeToTgtAfter = remaining / prod;
+        return timeToTgtAfter <= timeToCapAfter + 1e-9
+          ? delay + timeToTgtAfter
+          : Infinity;
       }
 
       // ── Solve entry point ─────────────────────────────────────────────────────────
@@ -1454,6 +1513,8 @@
       function renderResults({
         trades,
         finalAmounts,
+        preTradeAmounts,
+        tradeReceived,
         baselineScore,
         optimizedScore,
       }) {
@@ -1507,11 +1568,13 @@
             d.storage,
             d.target,
           );
-          const tAfter = timeForResource(
-            finalAmounts[i],
+          const tAfter = timeForResourceWithTrade(
+            preTradeAmounts[i],
             d.production,
             d.storage,
             d.target,
+            tradeReceived[i],
+            TRADE_DELAY_HOURS,
           );
           const isBottleneck =
             isFinite(optimizedScore) &&
