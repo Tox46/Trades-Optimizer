@@ -59,7 +59,7 @@
         background: var(--surface);
         border: 1px solid var(--border);
         border-left: 3px solid var(--muted);
-        padding: 1.4rem 1.6rem;
+        padding: 1.4rem 1.6rem 0.7rem;
         margin-bottom: 2.5rem;
         max-width: 860px;
       }
@@ -292,7 +292,14 @@
         border: 1px solid var(--border);
         border-top: none;
         padding: 1.3rem;
-        margin-bottom: 2px;
+        margin-bottom: 2.5rem;
+      }
+
+      .paste-actions-row {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        flex-wrap: wrap;
       }
 
       .paste-panel textarea {
@@ -368,29 +375,33 @@
         color: var(--accent);
         font-family: var(--sans);
         font-weight: 800;
-        font-size: 1.05rem;
-        letter-spacing: 0.2em;
+        font-size: 0.9rem;
+        letter-spacing: 0.15em;
         text-transform: uppercase;
-        padding: 0.65rem 2rem;
+        padding: 0.55rem 1.3rem;
         cursor: pointer;
         transition:
           background 0.15s,
           color 0.15s;
         flex-shrink: 0;
       }
-      #solve-btn:hover {
+      #solve-btn:hover:not(:disabled) {
         background: var(--accent);
         color: var(--bg);
       }
       #solve-btn:disabled {
-        opacity: 0.5;
+        opacity: 0.4;
+        border-color: var(--muted);
+        color: var(--muted);
         cursor: default;
       }
 
       #solve-status {
+        display: block;
         font-family: var(--mono);
         font-size: 0.95rem;
         color: var(--muted);
+        margin-top: 0.6rem;
       }
 
       /* ── RESULTS ─────────────────────────────────────────────────────────────── */
@@ -740,16 +751,13 @@
         id="paste-textarea"
         placeholder="Copy your resource summary from the game and paste it here…"
       ></textarea>
-      <div>
+      <div class="paste-actions-row">
         <button class="paste-btn" onclick="parseTextarea()">
           Parse pasted text
         </button>
-        <div id="paste-status"></div>
+        <button id="solve-btn" onclick="solve()" disabled>Optimize</button>
       </div>
-    </div>
-
-    <div class="solve-row">
-      <button id="solve-btn" onclick="solve()">Optimize</button>
+      <div id="paste-status"></div>
       <span id="solve-status">Enter your values and hit Optimize.</span>
     </div>
 
@@ -1042,6 +1050,7 @@
         try {
           const { found, label } = parseGameText(raw);
           buildGrid();
+          delete document.getElementById("solve-status").dataset.locked;
           statusEl.className = "ok";
           statusEl.textContent = `${label}: ${found.join(", ")}`;
           document.getElementById("paste-textarea").value = "";
@@ -1098,10 +1107,42 @@
         </div>
       </div>`;
         });
+        updateSolveAvailability();
       }
 
       function setState(r, field, val) {
         state[r][field] = parseFloat(val) || 0;
+        delete document.getElementById("solve-status").dataset.locked;
+        updateSolveAvailability();
+      }
+
+      // ── Validity check ──────────────────────────────────────────────────────────
+      // The solve button stays disabled until every field for every resource is a
+      // real, finite number and storage/target combos aren't outright impossible.
+      function inputsAreValid() {
+        return RES.every((r) => {
+          const d = state[r];
+          const nums = [d.current, d.production, d.storage, d.target];
+          if (nums.some((n) => typeof n !== "number" || !isFinite(n))) {
+            return false;
+          }
+          if (d.current < 0 || d.production < 0 || d.target < 0) return false;
+          if (d.storage < 1) return false;
+          return true;
+        });
+      }
+
+      function updateSolveAvailability() {
+        const btn = document.getElementById("solve-btn");
+        const status = document.getElementById("solve-status");
+        if (!btn) return;
+        const valid = inputsAreValid();
+        btn.disabled = !valid;
+        if (status && !status.dataset.locked) {
+          status.textContent = valid
+            ? "Ready — hit Optimize."
+            : "Enter valid values for every field to enable Optimize.";
+        }
       }
 
       // ── Core simulation ───────────────────────────────────────────────────────────
@@ -1455,6 +1496,7 @@
         const btn = document.getElementById("solve-btn");
         const status = document.getElementById("solve-status");
         btn.disabled = true;
+        status.dataset.locked = "1";
         status.textContent = "Optimizing…";
 
         setTimeout(() => {
@@ -1505,7 +1547,7 @@
           } catch (e) {
             status.textContent = "Error: " + e.message;
           }
-          btn.disabled = false;
+          btn.disabled = !inputsAreValid();
         }, 40);
       }
 
