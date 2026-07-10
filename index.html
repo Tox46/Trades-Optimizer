@@ -404,6 +404,24 @@
         margin-top: 0.6rem;
       }
 
+      #solve-progress-track {
+        display: none;
+        width: 100%;
+        height: 4px;
+        background: var(--surface2);
+        border: 1px solid var(--border);
+        margin-top: 0.6rem;
+        overflow: hidden;
+      }
+      #solve-progress-track.active {
+        display: block;
+      }
+      #solve-progress-fill {
+        height: 100%;
+        width: 0%;
+        background: var(--wood);
+      }
+
       /* ── RESULTS ─────────────────────────────────────────────────────────────── */
       #results {
         display: none;
@@ -759,6 +777,9 @@
       </div>
       <div id="paste-status"></div>
       <span id="solve-status">Enter your values and hit Optimize.</span>
+      <div id="solve-progress-track">
+        <div id="solve-progress-fill"></div>
+      </div>
     </div>
 
     <div id="results">
@@ -1183,7 +1204,7 @@
       // flow[k] < 0 means resource pairB gives |flow[k]| to pairA.
       // This structurally prevents back-and-forth trades between the same pair.
 
-      function optimizeTrades() {
+      async function optimizeTrades(onProgress) {
         const N = RES.length;
         const base = RES.map((r) => state[r].current);
         const baselineScore = simulate(base);
@@ -1277,6 +1298,13 @@
         const RESTARTS = 100;
 
         for (let restart = 0; restart < RESTARTS; restart++) {
+          // Yield control back to the browser every few restarts so it can
+          // actually paint (e.g. animate the progress bar) instead of the
+          // whole 100-restart search blocking the main thread in one go.
+          if (restart > 0 && restart % 8 === 0) {
+            if (onProgress) onProgress(restart / RESTARTS);
+            await new Promise((resolve) => setTimeout(resolve, 0));
+          }
           let flows = new Array(P).fill(0);
 
           if (restart > 0) {
@@ -1491,64 +1519,177 @@
           : Infinity;
       }
 
+      // ── Animated progress bar ────────────────────────────────────────────────────
+      // Driven purely by real, confirmed progress from the actual
+      // computation (optimizeTrades yields periodically and reports how far
+      // through it is). No time-based guessing: for a workload whose
+      // duration varies a lot between setups, an estimated-time curve can
+      // run ahead of the real work and then has to sit and wait for it to
+      // catch up. The displayed value eases toward the confirmed value each
+      // frame so individual jumps get smoothed rather than snapping, but it
+      // can never show more progress than has actually happened.
+      const progressAnimator = {
+        raf: null,
+        current: 0, // 0-100, displayed
+        confirmed: 0, // 0-100, actually completed work
+        el: null,
+        done: false,
+      };
+
+      function progressStart() {
+        progressAnimator.current = 0;
+        progressAnimator.confirmed = 0;
+        progressAnimator.done = false;
+        if (progressAnimator.el) progressAnimator.el.style.width = "0%";
+        if (!progressAnimator.raf) {
+          progressAnimator.raf = requestAnimationFrame(progressTick);
+        }
+      }
+
+      // Call each time a chunk of real work completes, so the bar is never
+      // allowed to visually race ahead of what's actually done.
+      function progressConfirm(pct) {
+        progressAnimator.confirmed = Math.max(progressAnimator.confirmed, pct);
+      }
+
+      function progressFinishNow() {
+        progressAnimator.done = true;
+        progressAnimator.confirmed = 100;
+      }
+
+      function progressReset() {
+        if (progressAnimator.raf) cancelAnimationFrame(progressAnimator.raf);
+        progressAnimator.raf = null;
+        progressAnimator.current = 0;
+        progressAnimator.confirmed = 0;
+        progressAnimator.done = false;
+        if (progressAnimator.el) {
+          progressAnimator.el.style.width = "0%";
+        }
+      }
+
+      function progressColorFor(pct) {
+        // 4 equal segments, colored like the 4 resources.
+        if (pct < 25) return "var(--wood)";
+        if (pct < 50) return "var(--stone)";
+        if (pct < 75) return "var(--metal)";
+        return "var(--food)";
+      }
+
+      function progressTick() {
+        const display = progressAnimator.done ? 100 : progressAnimator.confirmed;
+
+        // Smooth toward the confirmed value rather than snapping straight
+        // to it, so a jump from one yield point to the next still glides.
+        const gap = display - progressAnimator.current;
+        if (Math.abs(gap) > 0.02) {
+          progressAnimator.current += gap * 0.2;
+        } else {
+          progressAnimator.current = display;
+        }
+
+        if (progressAnimator.el) {
+          progressAnimator.el.style.width = `${progressAnimator.current}%`;
+          progressAnimator.el.style.background = progressColorFor(
+            progressAnimator.current,
+          );
+        }
+
+        const settled =
+          progressAnimator.done &&
+          Math.abs(100 - progressAnimator.current) < 0.05;
+
+        if (!settled) {
+          progressAnimator.raf = requestAnimationFrame(progressTick);
+        } else {
+          progressAnimator.raf = null;
+        }
+      }
+
+      function progressWaitForDone(callback) {
+        if (progressAnimator.done && Math.abs(100 - progressAnimator.current) < 0.05) {
+          callback();
+        } else {
+          requestAnimationFrame(() => progressWaitForDone(callback));
+        }
+      }
+
       // ── Solve entry point ─────────────────────────────────────────────────────────
-      function solve() {
+      async function solve() {
         const btn = document.getElementById("solve-btn");
         const status = document.getElementById("solve-status");
+        const track = document.getElementById("solve-progress-track");
+        const fill = document.getElementById("solve-progress-fill");
+        progressAnimator.el = fill;
+
         btn.disabled = true;
         status.dataset.locked = "1";
-        status.textContent = "Optimizing…";
 
-        setTimeout(() => {
+        // Clear paste zone on every optimization run
+        document.getElementById("paste-textarea").value = "";
+        document.getElementById("paste-status").textContent = "";
+        document.getElementById("paste-status").className = "";
+
+        const signature = getStateSignature();
+        const isNewSetup = optimizationMemory.signature !== signature;
+
+        const finish = (result, note) => {
           try {
-            // Clear paste zone on every optimization run
-            document.getElementById("paste-textarea").value = "";
-            document.getElementById("paste-status").textContent = "";
-            document.getElementById("paste-status").className = "";
-
-            const signature = getStateSignature();
-            const isNewSetup = optimizationMemory.signature !== signature;
-
-            let result;
-            let note = "";
-
-            if (isNewSetup) {
-              optimizationMemory.signature = signature;
-              optimizationMemory.bestResult = null;
-
-              // First solve for a parameter set:
-              // run 10 independent simulations and keep the best.
-              for (let i = 0; i < 10; i++) {
-                const candidate = optimizeTrades();
-                if (isBetterResult(candidate, optimizationMemory.bestResult)) {
-                  optimizationMemory.bestResult = candidate;
-                }
-              }
-
-              result = optimizationMemory.bestResult;
-              note = "New setup: ran 10 simulations and kept the best result.";
-            } else {
-              // Same parameters: run once and only keep it if it beats memory.
-              const candidate = optimizeTrades();
-
-              if (isBetterResult(candidate, optimizationMemory.bestResult)) {
-                optimizationMemory.bestResult = candidate;
-                note = "Found a better optimization than the previous best.";
-              } else {
-                note = "Kept previous best optimization.";
-              }
-
-              result = optimizationMemory.bestResult;
-            }
-
             renderResults(result);
             document.getElementById("results").style.display = "block";
             status.textContent = note;
           } catch (e) {
             status.textContent = "Error: " + e.message;
           }
+          track.classList.remove("active");
+          progressReset();
           btn.disabled = !inputsAreValid();
-        }, 40);
+        };
+
+        if (isNewSetup) {
+          optimizationMemory.signature = signature;
+          optimizationMemory.bestResult = null;
+          track.classList.add("active");
+          progressStart();
+
+          const TOTAL = 10;
+
+          for (let i = 0; i < TOTAL; i++) {
+            status.textContent = `Optimizing… simulation ${i + 1} of ${TOTAL}`;
+            // optimizeTrades yields internally every few restarts, so this
+            // callback fires several times per simulation - giving the bar
+            // real, granular confirmed progress instead of one jump per
+            // simulation.
+            const candidate = await optimizeTrades((innerFrac) => {
+              progressConfirm(((i + innerFrac) / TOTAL) * 100);
+            });
+            if (isBetterResult(candidate, optimizationMemory.bestResult)) {
+              optimizationMemory.bestResult = candidate;
+            }
+            progressConfirm(((i + 1) / TOTAL) * 100);
+          }
+
+          progressFinishNow();
+          progressWaitForDone(() => {
+            finish(
+              optimizationMemory.bestResult,
+              `New setup: ran ${TOTAL} simulations and kept the best result.`,
+            );
+          });
+        } else {
+          status.textContent = "Optimizing…";
+          await new Promise((resolve) => setTimeout(resolve, 40));
+          // Same parameters: run once and only keep it if it beats memory.
+          const candidate = await optimizeTrades();
+          let note;
+          if (isBetterResult(candidate, optimizationMemory.bestResult)) {
+            optimizationMemory.bestResult = candidate;
+            note = "Found a better optimization than the previous best.";
+          } else {
+            note = "Kept previous best optimization.";
+          }
+          finish(optimizationMemory.bestResult, note);
+        }
       }
 
       // ── Render ────────────────────────────────────────────────────────────────────
