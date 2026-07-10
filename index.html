@@ -593,6 +593,36 @@
         padding: 0.75rem 0;
       }
 
+      .waste-panel {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-left: 3px solid var(--danger);
+        padding: 1.5rem 1.3rem;
+        margin-bottom: 2.5rem;
+      }
+
+      .waste-total {
+        font-family: var(--mono);
+        font-size: 1.4rem;
+        font-weight: 500;
+        color: var(--danger);
+        margin-bottom: 0.9rem;
+      }
+
+      .waste-breakdown {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem 1.6rem;
+        font-family: var(--mono);
+        font-size: 0.9rem;
+        color: var(--muted);
+      }
+
+      .waste-breakdown span strong {
+        color: var(--text);
+        font-weight: 500;
+      }
+
       .bars-panel {
         background: var(--surface);
         border: 1px solid var(--border);
@@ -808,6 +838,12 @@
       <div class="trades-panel">
         <div class="section-title">Recommended trades</div>
         <div id="trade-list"></div>
+      </div>
+
+      <div class="waste-panel" id="waste-panel" style="display: none">
+        <div class="section-title">Resources wasted on trade fees</div>
+        <div class="waste-total" id="waste-total"></div>
+        <div class="waste-breakdown" id="waste-breakdown"></div>
       </div>
 
       <div class="bars-panel">
@@ -1447,6 +1483,7 @@
               to: RES[r.idx],
               give: giveRounded,
               receive: Math.floor(giveRounded / 3),
+              wasted: give - giveRounded,
             });
           }
           g.amount -= give;
@@ -1815,10 +1852,34 @@
         <span class="trade-from" style="color:${COLORS[t.from]}">${t.give.toLocaleString()} ${LABELS[t.from]}</span>
         <span class="trade-arrow">&#8594;</span>
         <span class="trade-to" style="color:${COLORS[t.to]}">${t.receive.toLocaleString()} ${LABELS[t.to]}</span>
-        <span class="trade-ratio">(3:1${t.give % 3 !== 0 ? ", " + (t.give % 3) + " wasted" : ""})</span>
+        <span class="trade-ratio">(3:1, ${t.receive * 2} wasted)</span>
       </div>`,
             )
             .join("");
+        }
+
+        // — Wasted resources (3:1 trade fee)
+        const wasteByRes = { wood: 0, stone: 0, metal: 0, food: 0 };
+        trades.forEach((t) => {
+          wasteByRes[t.from] += t.receive * 2;
+        });
+        const totalWaste = RES.reduce((sum, r) => sum + wasteByRes[r], 0);
+
+        const wastePanel = document.getElementById("waste-panel");
+        if (totalWaste > 0) {
+          wastePanel.style.display = "block";
+          document.getElementById("waste-total").textContent =
+            `${totalWaste.toLocaleString()} units lost to trade fees`;
+          document.getElementById("waste-breakdown").innerHTML = RES.filter(
+            (r) => wasteByRes[r] > 0,
+          )
+            .map(
+              (r) =>
+                `<span><strong style="color:${COLORS[r]}">${wasteByRes[r].toLocaleString()}</strong> ${LABELS[r]}</span>`,
+            )
+            .join("");
+        } else {
+          wastePanel.style.display = "none";
         }
 
         // — Progress bars
